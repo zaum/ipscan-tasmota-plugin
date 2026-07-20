@@ -6,6 +6,7 @@
  */
 package org.angryip.plugins.tasmota;
 
+import net.azib.ipscan.core.Plugin;
 import net.azib.ipscan.core.ScanningSubject;
 import net.azib.ipscan.fetchers.Fetcher;
 import net.azib.ipscan.fetchers.FetcherRegistry;
@@ -35,13 +36,18 @@ import static java.lang.Thread.currentThread;
  * device is not a Tasmota, or the response cannot be parsed, it simply
  * returns null without throwing.
  */
-public class TasmotaFetcher implements Fetcher {
+public class TasmotaFetcher implements Fetcher, Plugin {
 
 	// The open-ports parameter key is set by PortsFetcher under this literal
 	// value (it is package-private there, so we reference it directly).
 	private static final String PARAMETER_OPEN_PORTS = "openPorts";
 
 	public static final String ID = "fetcher.tasmota";
+
+	// Dedicated preference flag recording the user's explicit choice, so an
+	// enabled fetcher survives restarts despite the core app reading the
+	// selected-fetchers list before plugins are loaded.
+	private static final String DISABLED_KEY = "fetcher.tasmota.disabled";
 
 	public TasmotaFetcher(FetcherRegistry registry) {
 		registerIntoRegistry(registry);
@@ -57,8 +63,86 @@ public class TasmotaFetcher implements Fetcher {
 			Map<String, Fetcher> newMap = new LinkedHashMap<>(map);
 			newMap.put(getId(), this);
 			field.set(registry, java.util.Collections.unmodifiableMap(newMap));
+
+			// Track explicit enable/disable made through the Fetchers dialog so we
+			// can tell "user turned it off" apart from "selection was lost on restart".
+			registry.addListener(reg2 -> persistEnabledState(reg2));
+
+			restoreSelectionIfNeeded(registry);
 		}
 		catch (Exception ignored) {
+		}
+	}
+
+	/**
+	 * Called whenever the selected-fetchers list changes (i.e. the user saved the
+	 * Fetchers dialog). Records the user's explicit choice in a dedicated flag so
+	 * that an enabled Tasmota survives application restarts.
+	 */
+	private void persistEnabledState(FetcherRegistry registry) {
+		try {
+			java.util.prefs.Preferences prefs = getPreferences(registry);
+			if (prefs == null) return;
+			boolean enabled = registry.getSelectedFetchers().stream()
+					.anyMatch(f -> getId().equals(f.getId()));
+			if (enabled) {
+				prefs.remove(DISABLED_KEY);
+			}
+			else {
+				prefs.put(DISABLED_KEY, "true");
+			}
+		}
+		catch (Exception ignored) {
+		}
+	}
+
+	/**
+	 * The selected-fetchers list is read from Java Preferences at registry
+	 * construction time, before plugins are loaded. If the user had previously
+	 * enabled this fetcher (or it was enabled but its selection got lost on a
+	 * previous restart), re-apply that selection now that we are registered, and
+	 * re-persist it so the corruption cycle cannot drop it again.
+	 */
+	@SuppressWarnings("unchecked")
+	private void restoreSelectionIfNeeded(FetcherRegistry registry) {
+		try {
+			java.util.prefs.Preferences prefs = getPreferences(registry);
+			if (prefs == null) return;
+
+			// User explicitly turned the fetcher off -> respect that.
+			if (prefs.get(DISABLED_KEY, null) != null) return;
+
+			String saved = prefs.get("selectedFetchers", null);
+			boolean wasEnabled = saved != null
+					&& java.util.Arrays.asList(saved.split("###")).contains(getId());
+			// Nothing in the preference and never explicitly disabled: keep it off
+			// (don't force-enable on a fresh install where the user never chose it).
+			if (!wasEnabled) return;
+
+			Field selectedField = FetcherRegistry.class.getDeclaredField("selectedFetchers");
+			selectedField.setAccessible(true);
+			Map<String, Fetcher> selected = (Map<String, Fetcher>) selectedField.get(registry);
+			if (selected.containsKey(getId())) return;
+
+			Map<String, Fetcher> newSelected = new LinkedHashMap<>(selected);
+			newSelected.put(getId(), this);
+			selectedField.set(registry, java.util.Collections.unmodifiableMap(newSelected));
+
+			// Re-persist so the selection cannot be lost again on the next restart.
+			registry.updateSelectedFetchers(newSelected.keySet().toArray(new String[0]));
+		}
+		catch (Exception ignored) {
+		}
+	}
+
+	private static java.util.prefs.Preferences getPreferences(FetcherRegistry registry) {
+		try {
+			Field prefsField = FetcherRegistry.class.getDeclaredField("preferences");
+			prefsField.setAccessible(true);
+			return (java.util.prefs.Preferences) prefsField.get(registry);
+		}
+		catch (Exception e) {
+			return null;
 		}
 	}
 
