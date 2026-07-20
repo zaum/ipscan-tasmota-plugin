@@ -5,6 +5,7 @@
 package org.angryip.plugins.tasmota;
 
 import net.azib.ipscan.core.ScanningSubject;
+import net.azib.ipscan.fetchers.FetcherRegistry;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -27,7 +28,7 @@ public class TasmotaFetcherTest {
 
 	@Before
 	public void setUp() throws Exception {
-		fetcher = new TasmotaFetcher();
+		fetcher = new TasmotaFetcher(null);
 		server = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"));
 		port = server.getLocalPort();
 		new Thread(() -> {
