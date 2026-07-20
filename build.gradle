@@ -1,0 +1,55 @@
+plugins {
+    id 'java'
+}
+
+// The plugin depends on Angry IP Scanner's core API (Fetcher, ScanningSubject,
+// Plugin). At build time it must be on the classpath, but it must NOT be
+// packaged into the resulting plugin jar (the host application provides it).
+// Point this to the built ipscan classes or jar, e.g.:
+//     ./gradlew build -PipscanJar=/path/to/ipscan.jar
+// or rely on the default location below.
+def ipscanClasses = project.findProperty('ipscanClasses')
+        ?: '..\\ipscan\\build\\classes\\java\\main'
+def ipscanJar = project.findProperty('ipscanJar')
+
+group = 'org.angryip.plugins'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    if (ipscanJar) {
+        compileOnly files(ipscanJar)
+        testImplementation files(ipscanJar)
+    } else {
+        compileOnly files(ipscanClasses)
+        testImplementation files(ipscanClasses)
+    }
+    testImplementation 'junit:junit:4.13.2'
+}
+
+jar {
+    manifest {
+        attributes(
+                'Implementation-Title': 'Angry IP Scanner Tasmota Plugin',
+                'Implementation-Version': version,
+                'IPScan-Plugins': 'org.angryip.plugins.tasmota.TasmotaFetcher'
+        )
+    }
+    // Do not bundle the core classes into the plugin jar.
+    exclude 'net/azib/ipscan/**'
+}
+
+test {
+    useJUnit()
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+}
