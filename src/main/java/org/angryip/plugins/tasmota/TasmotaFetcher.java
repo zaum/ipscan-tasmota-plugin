@@ -250,8 +250,15 @@ public class TasmotaFetcher implements Fetcher, Plugin {
 		if (subject.isAnyPortRequested()) {
 			return subject.requestedPortsIterator();
 		}
-		// No open web port is known for this host and none were requested:
-		// probing every IP would only slow the scan down, so skip it.
+		// openPorts is null when PortsFetcher hasn't initialised the parameter
+		// yet (e.g. TasmotaFetcher runs before PortsFetcher in the column
+		// order). Probe the default Tasmota port directly so the fetcher still
+		// works regardless of column ordering.
+		if (openPorts == null) {
+			return java.util.Collections.singletonList(DEFAULT_PORT).iterator();
+		}
+		// openPorts is set but empty – PortsFetcher already ran and found
+		// nothing, so there is genuinely no point in probing.
 		return java.util.Collections.<Integer>emptyIterator();
 	}
 
