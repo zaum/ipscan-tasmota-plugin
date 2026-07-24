@@ -13,7 +13,7 @@ def ipscanClasses = project.findProperty('ipscanClasses')
 def ipscanJar = project.findProperty('ipscanJar')
 
 group = 'org.angryip.plugins'
-version = '1.0.0'
+version = '1.0.1'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
